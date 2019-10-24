@@ -3,8 +3,9 @@
 //! Individual options are separated out into multiple types. Each type acts
 //! both as a "field name" and the value of that option.
 
+use http::uri::Authority;
 use std::iter::FromIterator;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -259,6 +260,45 @@ impl SetOpt for DnsServers {
         }
 
         Ok(())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct DnsEntry {
+    authority: Authority,
+    addr: IpAddr,
+}
+
+impl DnsEntry {
+    pub fn new(authority: Authority, addr: IpAddr) -> Self {
+        Self {
+            authority,
+            addr,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct DnsResolves(Vec<String>);
+
+impl FromIterator<DnsEntry> for DnsResolves {
+    fn from_iter<I: IntoIterator<Item = DnsEntry>>(iter: I) -> Self {
+        DnsResolves(iter
+            .into_iter()
+            .map(|entry| format!("{}:{}", entry.authority, entry.addr))
+            .collect())
+    }
+}
+
+impl SetOpt for DnsResolves {
+    fn set_opt<H>(&self, easy: &mut curl::easy::Easy2<H>) -> Result<(), curl::Error> {
+        let mut list = curl::easy::List::new();
+
+        for entry in self.0.iter() {
+            list.append(entry)?;
+        }
+
+        easy.resolve(list)
     }
 }
 
